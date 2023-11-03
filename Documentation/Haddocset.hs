@@ -62,8 +62,9 @@ import           Distribution.Text                 (display, parse)
 import           Distribution.Text                 (display, simpleParse)
 #endif
 import           Documentation.Haddock
-import qualified Module                            as Ghc
-import qualified Name                              as Ghc
+import qualified GHC.Types.Name                    as Ghc
+import qualified GHC.Unit.Types                    as Ghc
+import qualified Language.Haskell.Syntax.Module.Name as Ghc
 
 import           Data.Conduit
 import           Data.Conduit.Filesystem (sourceDirectoryDeep)
@@ -126,12 +127,12 @@ readDocInfoFile pifile = doesDirectoryExist pifile >>= \isDir ->
     then filter ((== ".haddock") . takeExtension) <$> listDirectory pifile >>= \hdc -> case hdc of
         []       -> return Nothing
 #if __GLASGOW_HASKELL__ >= 810
-        hs@(h:_) -> readInterfaceFile freshNameCache h False >>= \ei -> case ei of
+        hs@(h:_) -> freshNameCache >>= \fnc -> readInterfaceFile fnc h False >>= \ei -> case ei of
 #else
         hs@(h:_) -> readInterfaceFile freshNameCache h >>= \ei -> case ei of
 #endif
             Left _     -> return Nothing
-            Right (InterfaceFile _ (intf:_)) -> do
+            Right (InterfaceFile _ _ (intf:_)) -> do
 #if __GLASGOW_HASKELL__ >= 810
                 let rPkg = simpleParse . Ghc.unitIdString . Ghc.moduleUnitId $ instMod intf :: Maybe PackageId
 #elif __GLASGOW_HASKELL__ >= 800
@@ -144,7 +145,7 @@ readDocInfoFile pifile = doesDirectoryExist pifile >>= \isDir ->
                 case rPkg of
 #if __GLASGOW_HASKELL__ >= 810
                     Nothing -> return Nothing
-                    Just pkg -> 
+                    Just pkg ->
                         return . Just $ DocInfo pkg hs [collapse pifile] True
 #else
                     []  -> return Nothing
@@ -229,7 +230,7 @@ copyHtml doc dst = do
     addAnchor tag = [tag]
 
     packageIdToUrl :: PackageId -> T.Text
-    packageIdToUrl (PackageIdentifier n v) = T.pack $ 
+    packageIdToUrl (PackageIdentifier n v) = T.pack $
       "https://hackage.haskell.org/package/" ++ unPackageName n ++ "-" ++ prettyShow v ++ "/docs/"
 
     unescape [] = Just []
@@ -313,7 +314,7 @@ moduleProvider iFile =
   where
     sub file = do
 #if __GLASGOW_HASKELL__ >= 810
-        rd <- liftIO $ readInterfaceFile freshNameCache file False
+        rd <- liftIO $ freshNameCache >>= \fnc -> readInterfaceFile fnc file False
 #else
         rd <- liftIO $ readInterfaceFile freshNameCache file
 #endif

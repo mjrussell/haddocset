@@ -2,3 +2,5 @@
 *.docset/
 .DS_Store
 stack.yaml.lock
+*.swp
+.direnv
